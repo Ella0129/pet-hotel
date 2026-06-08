@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>毛孩旅館 — 通知</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav class="navbar" id="navbar"></nav>
+
+<div class="page-wrap">
+  <div class="page-header">
+    <div>
+      <h2>🔔 通知中心</h2>
+      <p>查看所有系統與預約通知</p>
+    </div>
+    <button class="btn btn-outline" onclick="markAllRead()">✓ 全部標為已讀</button>
+  </div>
+
+  <div id="notifList"><div class="loading"><div class="spinner"></div></div></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/config.js"></script>
+<script src="js/ui.js"></script>
+<script>
+let currentUser = null;
+
+requireAuth(async user => {
+  currentUser = user;
+  renderNav("notifications.html");
+  loadNotifications();
+});
+
+const TYPE_ICONS = { reservation: "📋", emergency: "🚨", system: "⚙️" };
+
+async function loadNotifications() {
+  showLoading("notifList");
+  const snap = await db.collection("notifications")
+    .where("userId","==",currentUser.uid)
+    .orderBy("createdAt","desc").get();
+
+  const div = document.getElementById("notifList");
+  if (snap.empty) {
+    div.innerHTML = `<div class="empty-state"><div class="empty-icon">🔔</div><h3>暫無通知</h3><p>目前沒有任何通知</p></div>`;
+    return;
+  }
+
+  div.innerHTML = `<div class="card"><div class="notif-list">${snap.docs.map(d => {
+    const n = d.data();
+    return `<div class="notif-item ${n.read ? "" : "unread"}" onclick="markRead('${d.id}', this)">
+      <div class="notif-dot ${n.read ? "read" : ""}"></div>
+      <div style="flex:1">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="notif-title">${TYPE_ICONS[n.type] || "🔔"} ${n.title}</div>
+          <span style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;margin-left:1rem">${timeAgo(n.createdAt)}</span>
+        </div>
+        <div class="notif-msg">${n.message}</div>
+        ${n.reservationId ? `<a href="reservations.html" style="font-size:.8rem;color:var(--primary);margin-top:.3rem;display:inline-block">查看預約 →</a>` : ""}
+      </div>
+    </div>`;
+  }).join("")}</div></div>`;
+}
+
+async function markRead(id, el) {
+  await db.collection("notifications").doc(id).update({ read: true });
+  el.classList.remove("unread");
+  el.querySelector(".notif-dot").classList.add("read");
+  renderNav("notifications.html"); // refresh badge
+}
+
+async function markAllRead() {
+  const snap = await db.collection("notifications")
+    .where("userId","==",currentUser.uid)
+    .where("read","==",false).get();
+  if (snap.empty) { toast("沒有未讀通知", "info"); return; }
+  const batch = db.batch();
+  snap.docs.forEach(d => batch.update(d.ref, { read: true }));
+  await batch.commit();
+  toast("全部已標為已讀");
+  loadNotifications();
+  renderNav("notifications.html");
+}
+</script>
+</body>
+</html>

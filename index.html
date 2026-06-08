@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>毛孩旅館 — 登入</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .auth-page .auth-right { min-height: 100vh; }
+    .logo-area { text-align:center; margin-bottom:2rem; }
+    .logo-area h1 { font-size:2rem; color:var(--primary); }
+    .logo-area p  { color:var(--text-muted); font-size:.9rem; }
+    .logo-area .logo-icon { font-size:3rem; display:block; margin-bottom:.5rem; }
+    .divider { display:flex; align-items:center; gap:1rem; margin:1.25rem 0; color:var(--text-muted); font-size:.85rem; }
+    .divider::before, .divider::after { content:""; flex:1; height:1px; background:var(--border); }
+  </style>
+</head>
+<body>
+<div class="auth-page">
+  <!-- Left decorative panel -->
+  <div class="auth-left">
+    <div>
+      <div class="auth-icon">🐾</div>
+      <h1>毛孩旅館</h1>
+      <p>專業寵物住宿與美容管理系統</p>
+      <ul class="auth-features">
+        <li>線上預約住宿 &amp; 美容服務</li>
+        <li>寵物資料完整管理</li>
+        <li>即時預約狀態通知</li>
+        <li>管理員後台一覽全局</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Right auth panel -->
+  <div class="auth-right">
+    <div class="auth-card">
+      <div class="logo-area">
+        <span class="logo-icon">🐾</span>
+        <h1>毛孩旅館</h1>
+        <p>寵物旅館與美容預約管理系統</p>
+      </div>
+
+      <div id="alertBox"></div>
+
+      <!-- Tabs -->
+      <div class="auth-tabs">
+        <div class="auth-tab active" id="tabLogin" onclick="switchTab('login')">登入</div>
+        <div class="auth-tab" id="tabRegister" onclick="switchTab('register')">註冊</div>
+      </div>
+
+      <!-- Login -->
+      <div class="tab-pane active" id="paneLogin">
+        <div class="form-group">
+          <label class="form-label">電子郵件</label>
+          <input id="loginEmail" type="email" class="form-control" placeholder="your@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">密碼</label>
+          <input id="loginPassword" type="password" class="form-control" placeholder="••••••••">
+        </div>
+        <button id="btnLogin" class="btn btn-primary btn-full btn-lg" onclick="login()">登入</button>
+        <div class="divider">或</div>
+        <p style="text-align:center;font-size:.85rem;color:var(--text-muted)">
+          還沒有帳號？<a onclick="switchTab('register')" style="color:var(--primary);cursor:pointer;font-weight:600">立即註冊</a>
+        </p>
+        <p style="text-align:center;font-size:.8rem;color:var(--text-muted);margin-top:.5rem">
+          Demo 管理員：admin@pethotel.com / admin123
+        </p>
+      </div>
+
+      <!-- Register -->
+      <div class="tab-pane" id="paneRegister">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">姓名 <span class="required">*</span></label>
+            <input id="regName" type="text" class="form-control" placeholder="王小明">
+          </div>
+          <div class="form-group">
+            <label class="form-label">手機號碼</label>
+            <input id="regPhone" type="tel" class="form-control" placeholder="0912345678">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">電子郵件 <span class="required">*</span></label>
+          <input id="regEmail" type="email" class="form-control" placeholder="your@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">密碼 <span class="required">*</span></label>
+          <input id="regPassword" type="password" class="form-control" placeholder="至少 6 個字元">
+          <p class="form-hint">密碼至少需要 6 個字元</p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">確認密碼 <span class="required">*</span></label>
+          <input id="regConfirm" type="password" class="form-control" placeholder="再次輸入密碼">
+        </div>
+        <button id="btnRegister" class="btn btn-primary btn-full btn-lg" onclick="register()">建立帳號</button>
+        <p style="text-align:center;font-size:.85rem;color:var(--text-muted);margin-top:1rem">
+          已有帳號？<a onclick="switchTab('login')" style="color:var(--primary);cursor:pointer;font-weight:600">直接登入</a>
+        </p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/config.js"></script>
+<script src="js/ui.js"></script>
+<script>
+  // Redirect if already logged in
+  auth.onAuthStateChanged(user => {
+    if (user) window.location.href = "dashboard.html";
+  });
+
+  function switchTab(tab) {
+    document.querySelectorAll(".auth-tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+    document.getElementById(tab === "login" ? "tabLogin" : "tabRegister").classList.add("active");
+    document.getElementById(tab === "login" ? "paneLogin" : "paneRegister").classList.add("active");
+    document.getElementById("alertBox").innerHTML = "";
+  }
+
+  function showAlert(message, type = "danger") {
+    document.getElementById("alertBox").innerHTML =
+      `<div class="alert alert-${type}">${message}</div>`;
+  }
+
+  async function login() {
+    const email    = document.getElementById("loginEmail").value.trim();
+    const password = document.getElementById("loginPassword").value;
+    if (!email || !password) { showAlert("請填寫所有欄位"); return; }
+    setBtn("btnLogin", true, "登入");
+    try {
+      await auth.signInWithEmailAndPassword(email, password);
+      window.location.href = "dashboard.html";
+    } catch (e) {
+      const msg = {
+        "auth/user-not-found": "找不到此帳號",
+        "auth/wrong-password": "密碼錯誤",
+        "auth/invalid-email":  "Email 格式不正確",
+        "auth/too-many-requests": "嘗試次數過多，請稍後再試",
+      };
+      showAlert(msg[e.code] || "登入失敗：" + e.message);
+      setBtn("btnLogin", false, "登入");
+    }
+  }
+
+  async function register() {
+    const name     = document.getElementById("regName").value.trim();
+    const phone    = document.getElementById("regPhone").value.trim();
+    const email    = document.getElementById("regEmail").value.trim();
+    const password = document.getElementById("regPassword").value;
+    const confirm  = document.getElementById("regConfirm").value;
+    if (!name || !email || !password) { showAlert("請填寫所有必填欄位"); return; }
+    if (password !== confirm) { showAlert("兩次密碼不一致"); return; }
+    if (password.length < 6) { showAlert("密碼至少需要 6 個字元"); return; }
+    setBtn("btnRegister", true, "建立帳號");
+    try {
+      const cred = await auth.createUserWithEmailAndPassword(email, password);
+      const role = ADMIN_EMAILS.includes(email) ? "admin" : "member";
+      await db.collection("users").doc(cred.user.uid).set({
+        name, email, phone: phone || "", role,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      await initServices();
+      await sendNotification(cred.user.uid, "歡迎加入毛孩旅館！", `您好 ${name}，感謝您的加入，開始為您的毛孩預約服務吧！`, "system");
+      window.location.href = "dashboard.html";
+    } catch (e) {
+      const msg = {
+        "auth/email-already-in-use": "此 Email 已被使用",
+        "auth/invalid-email": "Email 格式不正確",
+        "auth/weak-password": "密碼強度不足",
+      };
+      showAlert(msg[e.code] || "註冊失敗：" + e.message);
+      setBtn("btnRegister", false, "建立帳號");
+    }
+  }
+
+  // Enter key support
+  document.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      const active = document.querySelector(".tab-pane.active").id;
+      active === "paneLogin" ? login() : register();
+    }
+  });
+</script>
+</body>
+</html>

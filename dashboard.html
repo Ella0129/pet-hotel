@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>毛孩旅館 — 首頁</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav class="navbar" id="navbar"></nav>
+
+<div class="page-wrap">
+  <!-- Welcome -->
+  <div class="page-header">
+    <div>
+      <h2 id="welcomeMsg">👋 歡迎回來</h2>
+      <p id="welcomeSub">在這裡管理您的毛孩與預約</p>
+    </div>
+    <a href="reserve.html" class="btn btn-accent">📅 立即預約</a>
+  </div>
+
+  <!-- Stats -->
+  <div class="stat-grid" id="statsGrid">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:2rem" class="dashboard-grid">
+    <!-- Recent reservations -->
+    <div class="card">
+      <div class="card-header">
+        <h3>📋 近期預約</h3>
+        <a href="reservations.html" class="btn btn-ghost btn-sm">查看全部 →</a>
+      </div>
+      <div id="recentReservations"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+
+    <!-- Recent notifications -->
+    <div class="card">
+      <div class="card-header">
+        <h3>🔔 最新通知</h3>
+        <a href="notifications.html" class="btn btn-ghost btn-sm">查看全部 →</a>
+      </div>
+      <div id="recentNotifs"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+
+  <!-- Quick actions -->
+  <div class="card" style="margin-top:1.5rem">
+    <div class="card-header"><h3>⚡ 快速操作</h3></div>
+    <div class="card-body" style="display:flex;gap:1rem;flex-wrap:wrap">
+      <a href="pets.html" class="btn btn-outline">🐾 管理寵物資料</a>
+      <a href="reserve.html" class="btn btn-outline">🏨 預約住宿</a>
+      <a href="reserve.html" class="btn btn-outline">✂️ 預約美容</a>
+      <a href="reservations.html" class="btn btn-outline">📋 查看預約記錄</a>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/config.js"></script>
+<script src="js/ui.js"></script>
+<script>
+requireAuth(async user => {
+  renderNav("dashboard.html");
+
+  // User info
+  const userDoc = await db.collection("users").doc(user.uid).get();
+  const userData = userDoc.data() || {};
+  document.getElementById("welcomeMsg").textContent = `👋 歡迎回來，${userData.name || ""}`;
+
+  // Stats
+  const [petsSnap, reservSnap, notifSnap] = await Promise.all([
+    db.collection("pets").where("userId","==",user.uid).get(),
+    db.collection("reservations").where("userId","==",user.uid).get(),
+    db.collection("notifications").where("userId","==",user.uid).where("read","==",false).get()
+  ]);
+  const pending = reservSnap.docs.filter(d => d.data().status === "pending").length;
+  document.getElementById("statsGrid").innerHTML = `
+    <div class="stat-card"><div class="stat-icon blue">🐾</div><div><div class="stat-number">${petsSnap.size}</div><div class="stat-label">我的寵物</div></div></div>
+    <div class="stat-card"><div class="stat-icon green">📋</div><div><div class="stat-number">${reservSnap.size}</div><div class="stat-label">總預約數</div></div></div>
+    <div class="stat-card"><div class="stat-icon orange">⏳</div><div><div class="stat-number">${pending}</div><div class="stat-label">待審核預約</div></div></div>
+    <div class="stat-card"><div class="stat-icon red">🔔</div><div><div class="stat-number">${notifSnap.size}</div><div class="stat-label">未讀通知</div></div></div>
+  `;
+
+  // Recent reservations (latest 4)
+  const recent = await db.collection("reservations")
+    .where("userId","==",user.uid)
+    .orderBy("createdAt","desc").limit(4).get();
+
+  const rDiv = document.getElementById("recentReservations");
+  if (recent.empty) {
+    rDiv.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><p>還沒有預約記錄</p></div>`;
+  } else {
+    rDiv.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>寵物</th><th>服務</th><th>日期</th><th>狀態</th></tr></thead>
+      <tbody>${recent.docs.map(d => {
+        const r = d.data();
+        return `<tr>
+          <td>${r.petName}</td>
+          <td>${typeBadge(r.serviceType)}</td>
+          <td>${r.startDate}</td>
+          <td>${statusBadge(r.status)}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table></div>`;
+  }
+
+  // Recent notifications (latest 5)
+  const notifs = await db.collection("notifications")
+    .where("userId","==",user.uid)
+    .orderBy("createdAt","desc").limit(5).get();
+
+  const nDiv = document.getElementById("recentNotifs");
+  if (notifs.empty) {
+    nDiv.innerHTML = `<div class="empty-state"><div class="empty-icon">🔔</div><p>暫無通知</p></div>`;
+  } else {
+    nDiv.innerHTML = `<div class="notif-list">${notifs.docs.map(d => {
+      const n = d.data();
+      return `<div class="notif-item ${n.read ? "" : "unread"}">
+        <div class="notif-dot ${n.read ? "read" : ""}"></div>
+        <div>
+          <div class="notif-title">${n.title}</div>
+          <div class="notif-msg">${n.message}</div>
+          <div class="notif-time">${timeAgo(n.createdAt)}</div>
+        </div>
+      </div>`;
+    }).join("")}</div>`;
+  }
+});
+</script>
+<style>
+@media(max-width:768px){.dashboard-grid{grid-template-columns:1fr!important}}
+</style>
+</body>
+</html>

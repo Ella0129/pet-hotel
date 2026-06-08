@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>毛孩旅館 — 寵物管理</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav class="navbar" id="navbar"></nav>
+
+<div class="page-wrap">
+  <div class="page-header">
+    <div>
+      <h2>🐾 寵物管理</h2>
+      <p>管理您的毛孩基本資料</p>
+    </div>
+    <button class="btn btn-accent" onclick="openModal('petModal')">＋ 新增寵物</button>
+  </div>
+
+  <div id="petList"><div class="loading"><div class="spinner"></div></div></div>
+</div>
+
+<!-- Pet Modal -->
+<div class="modal-overlay" id="petModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">新增寵物</h3>
+      <button class="modal-close" onclick="closeModal('petModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editPetId">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">寵物名字 <span class="required">*</span></label>
+          <input id="petName" type="text" class="form-control" placeholder="例：小白">
+        </div>
+        <div class="form-group">
+          <label class="form-label">物種 <span class="required">*</span></label>
+          <select id="petSpecies" class="form-control">
+            <option value="">選擇物種</option>
+            <option value="狗">🐶 狗</option>
+            <option value="貓">🐱 貓</option>
+            <option value="兔子">🐰 兔子</option>
+            <option value="倉鼠">🐹 倉鼠</option>
+            <option value="鳥類">🐦 鳥類</option>
+            <option value="其他">其他</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">品種</label>
+          <input id="petBreed" type="text" class="form-control" placeholder="例：柴犬">
+        </div>
+        <div class="form-group">
+          <label class="form-label">年齡（歲）</label>
+          <input id="petAge" type="number" class="form-control" placeholder="3" min="0" max="30">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">健康備註</label>
+        <textarea id="petHealth" class="form-control" rows="3" placeholder="例：對某些食物過敏、需要定時服藥等特殊注意事項"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('petModal')">取消</button>
+      <button id="btnSavePet" class="btn btn-primary" onclick="savePet()">💾 儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete confirm modal -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>確認刪除</h3>
+      <button class="modal-close" onclick="closeModal('deleteModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p>確定要刪除 <strong id="deleteTargetName"></strong> 的資料嗎？此動作無法復原。</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('deleteModal')">取消</button>
+      <button id="btnConfirmDelete" class="btn btn-danger" onclick="confirmDelete()">刪除</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/config.js"></script>
+<script src="js/ui.js"></script>
+<script>
+let currentUser = null;
+let deletePetId  = null;
+
+const SPECIES_EMOJI = { "狗":"🐶","貓":"🐱","兔子":"🐰","倉鼠":"🐹","鳥類":"🐦","其他":"🐾" };
+
+requireAuth(async user => {
+  currentUser = user;
+  renderNav("pets.html");
+  loadPets();
+});
+
+async function loadPets() {
+  showLoading("petList");
+  const snap = await db.collection("pets")
+    .where("userId","==",currentUser.uid)
+    .orderBy("createdAt","desc").get();
+
+  const div = document.getElementById("petList");
+  if (snap.empty) {
+    div.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">🐾</div>
+      <h3>還沒有寵物資料</h3>
+      <p>點擊「新增寵物」開始建立您的毛孩檔案</p>
+    </div>`;
+    return;
+  }
+
+  div.innerHTML = `<div class="card-grid">${snap.docs.map(d => {
+    const p = d.data();
+    const emoji = SPECIES_EMOJI[p.species] || "🐾";
+    return `<div class="pet-card">
+      <div class="pet-avatar">${emoji}</div>
+      <div class="pet-name">${p.name}</div>
+      <div class="pet-species">${p.species}${p.breed ? ` · ${p.breed}` : ""}</div>
+      <div class="pet-info-row">
+        ${p.age ? `<span class="pet-tag">🎂 ${p.age} 歲</span>` : ""}
+        ${p.healthInfo ? `<span class="pet-tag">📋 有健康備註</span>` : ""}
+      </div>
+      ${p.healthInfo ? `<div style="margin-top:.75rem;padding:.75rem;background:var(--surface-2);border-radius:var(--radius-sm);font-size:.85rem;color:var(--text-muted)">${p.healthInfo}</div>` : ""}
+      <div class="pet-actions">
+        <button class="btn btn-outline btn-sm" onclick="editPet('${d.id}')">✏️ 編輯</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deletePet('${d.id}','${p.name}')">🗑️ 刪除</button>
+        <a href="reserve.html?petId=${d.id}" class="btn btn-accent btn-sm" style="margin-left:auto">📅 預約</a>
+      </div>
+    </div>`;
+  }).join("")}</div>`;
+}
+
+function clearForm() {
+  ["petName","petBreed","petHealth"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("petSpecies").value = "";
+  document.getElementById("petAge").value = "";
+  document.getElementById("editPetId").value = "";
+  document.getElementById("modalTitle").textContent = "新增寵物";
+}
+
+function openAddModal() {
+  clearForm();
+  openModal("petModal");
+}
+
+async function editPet(petId) {
+  const doc = await db.collection("pets").doc(petId).get();
+  const p = doc.data();
+  document.getElementById("editPetId").value = petId;
+  document.getElementById("petName").value    = p.name || "";
+  document.getElementById("petSpecies").value = p.species || "";
+  document.getElementById("petBreed").value   = p.breed || "";
+  document.getElementById("petAge").value     = p.age || "";
+  document.getElementById("petHealth").value  = p.healthInfo || "";
+  document.getElementById("modalTitle").textContent = "編輯寵物資料";
+  openModal("petModal");
+}
+
+async function savePet() {
+  const name    = document.getElementById("petName").value.trim();
+  const species = document.getElementById("petSpecies").value;
+  const breed   = document.getElementById("petBreed").value.trim();
+  const age     = parseInt(document.getElementById("petAge").value) || 0;
+  const health  = document.getElementById("petHealth").value.trim();
+  const editId  = document.getElementById("editPetId").value;
+
+  if (!name || !species) { toast("請填寫寵物名字和物種", "error"); return; }
+  setBtn("btnSavePet", true, "儲存");
+
+  const data = { name, species, breed, age, healthInfo: health, userId: currentUser.uid };
+
+  if (editId) {
+    await db.collection("pets").doc(editId).update({ ...data, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    toast("寵物資料已更新");
+  } else {
+    await db.collection("pets").add({ ...data, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    toast("寵物資料已新增");
+  }
+
+  setBtn("btnSavePet", false, "儲存");
+  closeModal("petModal");
+  loadPets();
+}
+
+function deletePet(petId, petName) {
+  deletePetId = petId;
+  document.getElementById("deleteTargetName").textContent = petName;
+  openModal("deleteModal");
+}
+
+async function confirmDelete() {
+  if (!deletePetId) return;
+  setBtn("btnConfirmDelete", true, "刪除");
+  await db.collection("pets").doc(deletePetId).delete();
+  toast("寵物資料已刪除", "warning");
+  closeModal("deleteModal");
+  loadPets();
+  deletePetId = null;
+  setBtn("btnConfirmDelete", false, "刪除");
+}
+
+// Allow opening from page header button
+document.querySelector(".btn-accent").addEventListener("click", openAddModal);
+</script>
+</body>
+</html>

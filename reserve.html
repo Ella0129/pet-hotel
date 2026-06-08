@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>毛孩旅館 — 預約服務</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav class="navbar" id="navbar"></nav>
+
+<div class="page-wrap">
+  <div class="page-header">
+    <div>
+      <h2>📅 預約服務</h2>
+      <p>為您的毛孩預約住宿或美容服務</p>
+    </div>
+  </div>
+
+  <div id="alertBox"></div>
+
+  <div style="max-width:680px">
+    <!-- Step 1: Service type -->
+    <div class="card" style="margin-bottom:1.5rem">
+      <div class="card-header"><h3>步驟 1：選擇服務類型</h3></div>
+      <div class="card-body">
+        <div class="service-grid">
+          <div class="service-option selected" id="optHotel" onclick="selectType('hotel')">
+            <span class="service-icon">🏨</span>
+            <h4>寵物住宿</h4>
+            <p>提供舒適的住宿環境，讓您的毛孩安心入住</p>
+          </div>
+          <div class="service-option" id="optGrooming" onclick="selectType('grooming')">
+            <span class="service-icon">✂️</span>
+            <h4>美容服務</h4>
+            <p>專業美容師為您的毛孩提供洗護造型服務</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Pet & Service selection -->
+    <div class="card" style="margin-bottom:1.5rem">
+      <div class="card-header"><h3>步驟 2：選擇寵物與方案</h3></div>
+      <div class="card-body">
+        <div class="form-group">
+          <label class="form-label">選擇寵物 <span class="required">*</span></label>
+          <select id="selectPet" class="form-control">
+            <option value="">載入中...</option>
+          </select>
+          <p class="form-hint"><a href="pets.html" style="color:var(--primary)">還沒有寵物資料？點此新增</a></p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">服務方案 <span class="required">*</span></label>
+          <select id="selectService" class="form-control">
+            <option value="">選擇方案</option>
+          </select>
+        </div>
+        <div id="serviceInfo" style="display:none;padding:.85rem;background:var(--info-bg);border-radius:var(--radius-sm);font-size:.9rem;color:var(--info);margin-top:.5rem"></div>
+      </div>
+    </div>
+
+    <!-- Step 3: Date/Time -->
+    <div class="card" style="margin-bottom:1.5rem">
+      <div class="card-header"><h3>步驟 3：選擇日期時間</h3></div>
+      <div class="card-body">
+        <div id="dateFieldsHotel">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">入住日期 <span class="required">*</span></label>
+              <input id="checkIn" type="date" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label">退房日期 <span class="required">*</span></label>
+              <input id="checkOut" type="date" class="form-control">
+            </div>
+          </div>
+          <div id="priceSummary" style="display:none;padding:.85rem;background:var(--success-bg);border-radius:var(--radius-sm);font-size:.9rem;color:var(--success)"></div>
+        </div>
+        <div id="dateFieldsGrooming" style="display:none">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">預約日期 <span class="required">*</span></label>
+              <input id="groomDate" type="date" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label">時間段 <span class="required">*</span></label>
+              <select id="groomTime" class="form-control">
+                <option value="">選擇時間</option>
+                <option value="09:00">09:00 - 11:00</option>
+                <option value="11:00">11:00 - 13:00</option>
+                <option value="14:00">14:00 - 16:00</option>
+                <option value="16:00">16:00 - 18:00</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: Notes -->
+    <div class="card" style="margin-bottom:1.5rem">
+      <div class="card-header"><h3>步驟 4：備注（選填）</h3></div>
+      <div class="card-body">
+        <div class="form-group">
+          <textarea id="reservNotes" class="form-control" rows="3" placeholder="特殊需求、飲食注意事項、緊急聯絡方式等..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <button id="btnSubmit" class="btn btn-primary btn-lg btn-full" onclick="submitReservation()">
+      📅 確認送出預約
+    </button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/config.js"></script>
+<script src="js/ui.js"></script>
+<script>
+let currentUser = null;
+let currentType = "hotel";
+let servicesMap  = {};
+
+requireAuth(async user => {
+  currentUser = user;
+  renderNav("reserve.html");
+  await initServices();
+  loadPets(user.uid);
+  loadServices("hotel");
+
+  // Set min date to today
+  const today = new Date().toISOString().split("T")[0];
+  ["checkIn","checkOut","groomDate"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.min = today;
+  });
+
+  // Pre-select pet if coming from pets page
+  const params = new URLSearchParams(location.search);
+  const preselect = params.get("petId");
+  if (preselect) setTimeout(() => { document.getElementById("selectPet").value = preselect; }, 500);
+});
+
+function selectType(type) {
+  currentType = type;
+  document.getElementById("optHotel").classList.toggle("selected", type === "hotel");
+  document.getElementById("optGrooming").classList.toggle("selected", type === "grooming");
+  document.getElementById("dateFieldsHotel").style.display = type === "hotel" ? "" : "none";
+  document.getElementById("dateFieldsGrooming").style.display = type === "grooming" ? "" : "none";
+  loadServices(type);
+}
+
+async function loadPets(uid) {
+  const snap = await db.collection("pets").where("userId","==",uid).get();
+  const sel  = document.getElementById("selectPet");
+  if (snap.empty) {
+    sel.innerHTML = '<option value="">尚未新增寵物，請先前往寵物管理頁面</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">-- 選擇寵物 --</option>' +
+    snap.docs.map(d => `<option value="${d.id}" data-name="${d.data().name}">${d.data().name} (${d.data().species})</option>`).join("");
+}
+
+async function loadServices(type) {
+  const snap = await db.collection("services").where("type","==",type).get();
+  const sel  = document.getElementById("selectService");
+  servicesMap = {};
+  sel.innerHTML = '<option value="">-- 選擇方案 --</option>';
+  snap.docs.forEach(d => {
+    servicesMap[d.id] = d.data();
+    sel.innerHTML += `<option value="${d.id}">${d.data().name} — NT$${d.data().price} / ${d.data().duration}</option>`;
+  });
+}
+
+document.getElementById("selectService").addEventListener("change", function() {
+  const svc = servicesMap[this.value];
+  const info = document.getElementById("serviceInfo");
+  if (svc) {
+    info.style.display = "";
+    info.textContent = `📌 ${svc.description} | 時間：${svc.duration} | 費用：NT$${svc.price}`;
+  } else {
+    info.style.display = "none";
+  }
+  updatePriceSummary();
+});
+
+document.getElementById("checkIn").addEventListener("change", updatePriceSummary);
+document.getElementById("checkOut").addEventListener("change", updatePriceSummary);
+
+function updatePriceSummary() {
+  const serviceId = document.getElementById("selectService").value;
+  const checkIn   = document.getElementById("checkIn").value;
+  const checkOut  = document.getElementById("checkOut").value;
+  const svc = servicesMap[serviceId];
+  const summary = document.getElementById("priceSummary");
+  if (svc && checkIn && checkOut) {
+    const days = Math.round((new Date(checkOut) - new Date(checkIn)) / 86400000);
+    if (days > 0) {
+      const total = days * svc.price;
+      summary.style.display = "";
+      summary.textContent = `✅ 住宿 ${days} 天，預估費用：NT$${total}（實際以現場結算為準）`;
+    } else {
+      summary.style.display = "";
+      summary.textContent = "⚠️ 退房日期必須晚於入住日期";
+      summary.style.background = "var(--warning-bg)";
+      summary.style.color = "var(--warning)";
+    }
+  } else {
+    summary.style.display = "none";
+  }
+}
+
+async function submitReservation() {
+  const petEl      = document.getElementById("selectPet");
+  const petId      = petEl.value;
+  const petName    = petEl.options[petEl.selectedIndex]?.dataset?.name || "";
+  const serviceId  = document.getElementById("selectService").value;
+  const notes      = document.getElementById("reservNotes").value.trim();
+
+  if (!petId)     { showAlert("請選擇寵物"); return; }
+  if (!serviceId) { showAlert("請選擇服務方案"); return; }
+
+  let startDate = "", endDate = "", timeSlot = "";
+  if (currentType === "hotel") {
+    startDate = document.getElementById("checkIn").value;
+    endDate   = document.getElementById("checkOut").value;
+    if (!startDate || !endDate) { showAlert("請選擇入住與退房日期"); return; }
+    if (endDate <= startDate)   { showAlert("退房日期必須晚於入住日期"); return; }
+  } else {
+    startDate = document.getElementById("groomDate").value;
+    timeSlot  = document.getElementById("groomTime").value;
+    if (!startDate) { showAlert("請選擇預約日期"); return; }
+    if (!timeSlot)  { showAlert("請選擇時間段"); return; }
+  }
+
+  setBtn("btnSubmit", true, "確認送出預約");
+  const svc = servicesMap[serviceId];
+
+  try {
+    const ref = await db.collection("reservations").add({
+      userId: currentUser.uid,
+      petId, petName,
+      serviceId, serviceName: svc.name,
+      serviceType: currentType,
+      startDate, endDate: endDate || startDate,
+      timeSlot: timeSlot || "",
+      status: "pending",
+      notes,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    await sendNotification(
+      currentUser.uid,
+      "預約送出成功！",
+      `您的 ${svc.name} 預約已送出，正等待管理員確認（預約 ID：${ref.id.slice(0,8)}）`,
+      "reservation", ref.id
+    );
+
+    toast("預約送出成功，請等待管理員審核！");
+    setTimeout(() => window.location.href = "reservations.html", 1500);
+  } catch (e) {
+    showAlert("預約失敗：" + e.message);
+    setBtn("btnSubmit", false, "確認送出預約");
+  }
+}
+
+function showAlert(msg) {
+  document.getElementById("alertBox").innerHTML = `<div class="alert alert-danger">⚠️ ${msg}</div>`;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+</script>
+</body>
+</html>

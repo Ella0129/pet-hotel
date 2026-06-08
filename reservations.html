@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>毛孩旅館 — 我的預約</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav class="navbar" id="navbar"></nav>
+
+<div class="page-wrap">
+  <div class="page-header">
+    <div>
+      <h2>📋 我的預約</h2>
+      <p>查看與管理您的所有預約記錄</p>
+    </div>
+    <a href="reserve.html" class="btn btn-accent">＋ 新增預約</a>
+  </div>
+
+  <div class="filter-bar">
+    <select id="filterStatus" class="filter-select" onchange="loadReservations()">
+      <option value="">全部狀態</option>
+      <option value="pending">待審核</option>
+      <option value="confirmed">已確認</option>
+      <option value="in_progress">服務中</option>
+      <option value="completed">已完成</option>
+      <option value="cancelled">已取消</option>
+      <option value="rejected">已拒絕</option>
+    </select>
+    <select id="filterType" class="filter-select" onchange="loadReservations()">
+      <option value="">全部類型</option>
+      <option value="hotel">住宿</option>
+      <option value="grooming">美容</option>
+    </select>
+  </div>
+
+  <div id="reservList"><div class="loading"><div class="spinner"></div></div></div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>預約詳情</h3>
+      <button class="modal-close" onclick="closeModal('detailModal')">✕</button>
+    </div>
+    <div class="modal-body" id="detailBody"></div>
+    <div class="modal-footer" id="detailFooter"></div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/config.js"></script>
+<script src="js/ui.js"></script>
+<script>
+let currentUser = null;
+
+requireAuth(async user => {
+  currentUser = user;
+  renderNav("reservations.html");
+  loadReservations();
+});
+
+async function loadReservations() {
+  showLoading("reservList");
+  const statusFilter = document.getElementById("filterStatus").value;
+  const typeFilter   = document.getElementById("filterType").value;
+
+  let q = db.collection("reservations").where("userId","==",currentUser.uid).orderBy("createdAt","desc");
+  const snap = await q.get();
+
+  let docs = snap.docs;
+  if (statusFilter) docs = docs.filter(d => d.data().status === statusFilter);
+  if (typeFilter)   docs = docs.filter(d => d.data().serviceType === typeFilter);
+
+  const div = document.getElementById("reservList");
+  if (docs.length === 0) {
+    div.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">📋</div>
+      <h3>沒有符合的預約記錄</h3>
+      <p><a href="reserve.html" style="color:var(--primary)">立即預約服務</a></p>
+    </div>`;
+    return;
+  }
+
+  div.innerHTML = `<div class="card"><div class="table-wrap"><table>
+    <thead><tr><th>寵物</th><th>服務</th><th>類型</th><th>日期</th><th>狀態</th><th>操作</th></tr></thead>
+    <tbody>${docs.map(d => {
+      const r = d.data();
+      const dateDisplay = r.serviceType === "hotel"
+        ? `${r.startDate} ~ ${r.endDate}`
+        : `${r.startDate} ${r.timeSlot || ""}`;
+      const canCancel = ["pending","confirmed"].includes(r.status);
+      return `<tr>
+        <td><strong>${r.petName}</strong></td>
+        <td>${r.serviceName}</td>
+        <td>${typeBadge(r.serviceType)}</td>
+        <td style="white-space:nowrap">${dateDisplay}</td>
+        <td>${statusBadge(r.status)}</td>
+        <td style="display:flex;gap:.4rem;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="showDetail('${d.id}')">詳情</button>
+          ${canCancel ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="cancelReservation('${d.id}')">取消</button>` : ""}
+        </td>
+      </tr>`;
+    }).join("")}</tbody>
+  </table></div></div>`;
+}
+
+async function showDetail(id) {
+  const doc = await db.collection("reservations").doc(id).get();
+  const r = doc.data();
+  const dateDisplay = r.serviceType === "hotel"
+    ? `入住：${r.startDate}　退房：${r.endDate}`
+    : `日期：${r.startDate}　時間：${r.timeSlot || ""}`;
+
+  document.getElementById("detailBody").innerHTML = `
+    <div style="display:grid;gap:.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:1.1rem;font-weight:700">${r.serviceName}</span>
+        ${statusBadge(r.status)}
+      </div>
+      <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:1rem;display:grid;gap:.5rem">
+        <div>🐾 <strong>寵物：</strong>${r.petName}</div>
+        <div>${r.serviceType === "hotel" ? "🏨" : "✂️"} <strong>服務類型：</strong>${r.serviceType === "hotel" ? "住宿" : "美容"}</div>
+        <div>📅 <strong>日期：</strong>${dateDisplay}</div>
+        ${r.notes ? `<div>📝 <strong>備注：</strong>${r.notes}</div>` : ""}
+        <div>🕐 <strong>建立時間：</strong>${formatDateTime(r.createdAt)}</div>
+      </div>
+      <div style="font-size:.8rem;color:var(--text-muted)">預約編號：${id}</div>
+    </div>`;
+
+  const canCancel = ["pending","confirmed"].includes(r.status);
+  document.getElementById("detailFooter").innerHTML = `
+    <button class="btn btn-ghost" onclick="closeModal('detailModal')">關閉</button>
+    ${canCancel ? `<button class="btn btn-danger" onclick="cancelReservation('${id}', true)">取消預約</button>` : ""}`;
+
+  openModal("detailModal");
+}
+
+async function cancelReservation(id, fromModal = false) {
+  if (!confirm("確定要取消這筆預約嗎？")) return;
+  await db.collection("reservations").doc(id).update({
+    status: "cancelled",
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  const doc = await db.collection("reservations").doc(id).get();
+  await sendNotification(
+    currentUser.uid,
+    "預約已取消",
+    `您的 ${doc.data().serviceName} 預約已成功取消`,
+    "reservation", id
+  );
+  toast("預約已取消", "warning");
+  if (fromModal) closeModal("detailModal");
+  loadReservations();
+}
+</script>
+</body>
+</html>
