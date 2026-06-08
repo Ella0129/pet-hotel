@@ -93,7 +93,25 @@ function handleAdminNav(isAdmin) {
   if (isAdmin) {
     window.location.href = "admin.html";
   } else {
-    toast("管理後台僅限管理員使用，請以管理員帳號登入", "warning", 4000);
+    // 顯示管理員帳號提示框
+    let hint = document.getElementById("adminHint");
+    if (!hint) {
+      hint = document.createElement("div");
+      hint.id = "adminHint";
+      hint.style.cssText = "position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;background:#1B4F72;color:#fff;border-radius:12px;padding:1.25rem 1.5rem;box-shadow:0 8px 32px rgba(0,0,0,0.25);max-width:300px;font-family:'Nunito',sans-serif;font-size:.9rem;";
+      hint.innerHTML = `
+        <div style="font-weight:700;margin-bottom:.6rem;">⚙️ 管理後台登入資訊</div>
+        <div style="opacity:.85;margin-bottom:.3rem;">📧 ekids1781@gmail.com</div>
+        <div style="opacity:.85;margin-bottom:.85rem;">🔑 ella6329</div>
+        <div style="font-size:.8rem;opacity:.7;margin-bottom:.75rem;">請先登出，再以上方帳號重新登入</div>
+        <button onclick="document.getElementById('adminHint').remove()"
+          style="background:rgba(255,255,255,0.2);border:none;color:#fff;
+                 padding:.35rem 1rem;border-radius:6px;cursor:pointer;font-size:.85rem;width:100%">
+          關閉
+        </button>`;
+      document.body.appendChild(hint);
+      setTimeout(() => hint?.remove(), 15000);
+    }
   }
 }
 
