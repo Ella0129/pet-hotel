@@ -81,6 +81,26 @@ function closeModal(id) {
   if (el) el.classList.remove("open");
 }
 
+// ── MOBILE NAV ─────────────────────────────────────────────────────
+function toggleMobileNav() {
+  const links = document.getElementById("navLinks");
+  const btn   = document.getElementById("hamburgerBtn");
+  if (!links) return;
+  const isOpen = links.classList.toggle("open");
+  btn.textContent = isOpen ? "✕" : "☰";
+}
+
+// Close mobile nav when clicking a link
+document.addEventListener("click", e => {
+  const nav = document.getElementById("navLinks");
+  const btn = document.getElementById("hamburgerBtn");
+  if (!nav) return;
+  if (!nav.contains(e.target) && !btn?.contains(e.target)) {
+    nav.classList.remove("open");
+    if (btn) btn.textContent = "☰";
+  }
+});
+
 // ── NAV ────────────────────────────────────────────────────────────
 async function renderNav(currentPage) {
   const user = auth.currentUser;
@@ -108,23 +128,30 @@ async function renderNav(currentPage) {
   if (!nav) return;
 
   const pages = [
-    { href: "dashboard.html", label: "首頁", icon: "🏠" },
-    { href: "pets.html",      label: "寵物管理", icon: "🐾" },
-    { href: "reserve.html",   label: "預約服務", icon: "📅" },
-    { href: "reservations.html", label: "我的預約", icon: "📋" },
-    { href: "notifications.html", label: `通知${unread > 0 ? `<span class='notif-badge'>${unread}</span>` : ""}`, icon: "🔔" },
+    { href: "dashboard.html",      label: "首頁",   icon: "🏠" },
+    { href: "pets.html",           label: "寵物管理", icon: "🐾" },
+    { href: "reserve.html",        label: "預約服務", icon: "📅" },
+    { href: "reservations.html",   label: "我的預約", icon: "📋" },
+    { href: "notifications.html",  label: `通知${unread > 0 ? `<span class='notif-badge'>${unread}</span>` : ""}`, icon: "🔔" },
   ];
 
   nav.innerHTML = `
     <div class="navbar-brand"><span>🐾</span> 毛孩旅館</div>
-    ${pages.map(p => `
-      <a href="${p.href}" class="nav-link ${currentPage === p.href ? "active" : ""}">
-        ${p.icon} <span>${p.label}</span>
-      </a>`).join("")}
-    ${isAdmin ? `<div class="nav-divider"></div><a href="admin.html" class="nav-link admin-link ${currentPage === "admin.html" ? "active" : ""}">⚙️ <span>管理後台</span></a>` : ""}
-    <div class="nav-divider"></div>
-    <span style="color:rgba(255,255,255,0.7);font-size:.85rem;">👤 ${name}</span>
-    <button class="btn-nav-logout" onclick="logout()">登出</button>
+    <button class="hamburger" id="hamburgerBtn" onclick="toggleMobileNav()">☰</button>
+    <div class="nav-links" id="navLinks">
+      ${pages.map(p => `
+        <a href="${p.href}" class="nav-link ${currentPage === p.href ? "active" : ""}" onclick="document.getElementById('navLinks').classList.remove('open')">
+          ${p.icon} <span>${p.label}</span>
+        </a>`).join("")}
+      ${isAdmin ? `
+        <div class="nav-divider"></div>
+        <a href="admin.html" class="nav-link admin-link ${currentPage === "admin.html" ? "active" : ""}" onclick="document.getElementById('navLinks').classList.remove('open')">
+          ⚙️ <span>管理後台</span>
+        </a>` : ""}
+      <div class="nav-divider"></div>
+      <span class="nav-user">👤 ${name}</span>
+      <button class="btn-nav-logout" onclick="logout()">登出</button>
+    </div>
   `;
 }
 
@@ -147,13 +174,25 @@ function requireAuth(callback) {
 async function requireAdmin(callback) {
   auth.onAuthStateChanged(async user => {
     if (!user) { window.location.href = "index.html"; return; }
-    const doc = await db.collection("users").doc(user.uid).get();
-    if (!doc.exists || doc.data().role !== "admin") {
-      toast("無管理員權限", "error");
-      window.location.href = "dashboard.html";
-      return;
+    try {
+      const doc = await db.collection("users").doc(user.uid).get();
+      if (!doc.exists || doc.data().role !== "admin") {
+        // 非管理員：顯示拒絕訊息後導回首頁
+        document.body.innerHTML = `
+          <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#FDFAF5;font-family:sans-serif;text-align:center;padding:2rem">
+            <div>
+              <div style="font-size:4rem;margin-bottom:1rem">🚫</div>
+              <h2 style="color:#1B4F72;margin-bottom:.5rem">無管理員權限</h2>
+              <p style="color:#7F8C8D;margin-bottom:1.5rem">此頁面僅限管理員存取</p>
+              <a href="dashboard.html" style="background:#1B4F72;color:#fff;padding:.75rem 2rem;border-radius:8px;text-decoration:none;font-weight:600">返回首頁</a>
+            </div>
+          </div>`;
+        return;
+      }
+      callback(user, doc.data());
+    } catch {
+      window.location.href = "index.html";
     }
-    callback(user, doc.data());
   });
 }
 
@@ -165,4 +204,3 @@ async function sendNotification(userId, title, message, type = "system", reserva
     read: false,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
-}
