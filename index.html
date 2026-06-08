@@ -111,9 +111,12 @@
 <script src="js/config.js"></script>
 <script src="js/ui.js"></script>
 <script>
+  // 防止註冊過程中 onAuthStateChanged 提早跳轉
+  let isRegistering = false;
+
   // Redirect if already logged in
   auth.onAuthStateChanged(user => {
-    if (user) window.location.href = "dashboard.html";
+    if (user && !isRegistering) window.location.href = "dashboard.html";
   });
 
   function switchTab(tab) {
@@ -159,6 +162,7 @@
     if (password !== confirm) { showAlert("兩次密碼不一致"); return; }
     if (password.length < 6) { showAlert("密碼至少需要 6 個字元"); return; }
     setBtn("btnRegister", true, "建立帳號");
+    isRegistering = true;
     try {
       const cred = await auth.createUserWithEmailAndPassword(email, password);
       const role = ADMIN_EMAILS.includes(email) ? "admin" : "member";
